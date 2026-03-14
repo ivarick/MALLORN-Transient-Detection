@@ -1,0 +1,253 @@
+# MALLORN TDE Classification Optimization Configuration
+# Target: F1 = 0.76 (from baseline 0.66)
+
+# =============================================================================
+# GENERAL SETTINGS
+# =============================================================================
+seed: 42
+n_folds: 5
+n_repeats: 2
+output_dir: "./submissions"
+
+# =============================================================================
+# FEATURE ENGINEERING
+# =============================================================================
+features:
+  # Core features
+  use_bayesian_blocks: true
+  use_temporal_morphology: true
+  use_color_evolution: true
+  
+  # FATS (Feature Analysis for Time Series)
+  use_fats_features: true
+  fats_exclude_percentile_ratios: true  # Exclude problematic features
+  
+  # Additional physics features
+  use_power_law_fit: true
+  use_variability_indices: true
+  use_cross_band_features: true
+
+# =============================================================================
+# SEMI-SUPERVISED LEARNING
+# =============================================================================
+semi_supervised:
+  enabled: true
+  method: "kmeans"
+  n_clusters: 40           # K in [35, 50] range
+  confidence_threshold: 0.80  # Min purity for pseudo-labels
+  outlier_percentile: 95      # Exclude top 5% outliers
+  
+  # Alternative: Confidence-based pseudo-labeling
+  use_confidence_threshold: true
+  high_confidence_threshold: 0.95  # For TDE class
+  medium_confidence_threshold: 0.80  # For SN/AGN
+
+# =============================================================================
+# DATA AUGMENTATION
+# =============================================================================
+augmentation:
+  # SMOTE configuration
+  use_smote: true
+  k_neighbors: 3           # Reduced for small TDE sample (64)
+  sampling_strategy: 0.1   # Conservative 1:10 ratio
+  
+  # Alternative SMOTE variants
+  use_borderline_smote: false
+  use_svm_smote: false
+  use_smote_enn: false
+  
+  # Physics-based augmentation
+  use_temporal_stretch: true
+  stretch_range: [0.8, 1.2]
+  use_photometric_noise: true
+  noise_scale: 0.05
+
+# =============================================================================
+# MODEL CONFIGURATION
+# =============================================================================
+models:
+  # LightGBM (Primary model)
+  lightgbm:
+    enabled: true
+    num_leaves: 31
+    max_depth: 6
+    learning_rate: 0.05
+    n_estimators: 2000
+    min_child_samples: 20
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 5
+    
+  # XGBoost
+  xgboost:
+    enabled: true
+    max_depth: 6
+    learning_rate: 0.05
+    n_estimators: 2000
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_weight: 5
+    
+  # Random Forest
+  random_forest:
+    enabled: true
+    n_estimators: 500
+    max_depth: 12
+    min_samples_split: 10
+    min_samples_leaf: 4
+    class_weight: "balanced"
+    
+  # Extra Trees
+  extra_trees:
+    enabled: true
+    n_estimators: 500
+    max_depth: 12
+    min_samples_split: 10
+    min_samples_leaf: 4
+    class_weight: "balanced"
+
+# =============================================================================
+# CLASS IMBALANCE HANDLING
+# =============================================================================
+class_imbalance:
+  # Class weights (inverse frequency)
+  # TDE:SN:AGN = 64:727:1407 → weights ≈ 22:2:1
+  class_weights:
+    0: 22.0   # TDE (minority)
+    1: 2.0    # SN
+    2: 1.0    # AGN (majority)
+  
+  # Alternative weighting schemes
+  use_sqrt_balanced: false  # Use 1/sqrt(n) instead of 1/n
+  
+  # Cost-sensitive learning
+  use_cost_sensitive: true
+  misclassification_costs:
+    tde_fn: 22.0  # Penalty for missing TDE
+    sn_fn: 2.0
+    agn_fn: 1.0
+
+# =============================================================================
+# THRESHOLD OPTIMIZATION
+# =============================================================================
+threshold:
+  enabled: true
+  method: "pr_curve"  # "pr_curve" or "cost_based"
+  
+  # Precision-Recall curve optimization
+  search_range: [0.1, 0.9]
+  search_step: 0.01
+  
+  # Class-specific thresholds
+  # TDE typically needs lower threshold (0.2-0.4)
+  default_threshold: 0.5
+  tde_threshold: 0.25
+  sn_threshold: 0.5
+  agn_threshold: 0.75
+  
+  # Cost-based optimization
+  optimize_for: "f1_macro"  # "f1_macro", "f1_weighted", "cost"
+
+# =============================================================================
+# ENSEMBLE CONFIGURATION
+# =============================================================================
+ensemble:
+  method: "average"  # "average", "weighted", "stacking"
+  
+  # Model weights for weighted ensemble
+  weights:
+    lightgbm: 0.35
+    xgboost: 0.30
+    random_forest: 0.20
+    extra_trees: 0.15
+  
+  # Stacking meta-learner
+  use_stacking: false
+  meta_learner: "logistic_regression"
+
+# =============================================================================
+# VALIDATION
+# =============================================================================
+validation:
+  method: "stratified_kfold"
+  n_splits: 5
+  shuffle: true
+  
+  # Check for data leakage
+  check_leakage: true
+  group_column: "object_id"  # Ensure same object not in train/val
+  
+  # Stratification
+  maintain_class_ratio: true
+  min_samples_per_class: 3   # Minimum samples per class per fold
+
+# =============================================================================
+# ADVANCED OPTIONS
+# =============================================================================
+advanced:
+  # Probability calibration
+  calibrate_probabilities: true
+  calibration_method: "isotonic"  # "sigmoid" (Platt) or "isotonic"
+  
+  # Feature selection
+  use_feature_selection: true
+  n_features_select: 300
+  selection_method: "mutual_info"  # "mutual_info", "chi2", "f_classif"
+  
+  # Dimensionality reduction
+  use_pca: false
+  pca_variance: 0.95
+  
+  # Label smoothing
+  use_label_smoothing: false
+  smoothing_alpha: 0.1
+
+# =============================================================================
+# EXPECTED PERFORMANCE BY CONFIGURATION
+# =============================================================================
+performance_targets:
+  baseline: 0.66
+  
+  # With physics features only
+  phase1_physics_features: 0.70
+  
+  # With threshold optimization
+  phase2_threshold_opt: 0.73
+  
+  # With semi-supervised learning
+  phase3_semi_supervised: 0.76
+  
+  # Full optimization
+  target: 0.76
+
+# =============================================================================
+# TROUBLESHOOTING GUIDE
+# =============================================================================
+troubleshooting:
+  # If F1 < 0.70
+  low_f1:
+    - "Check Bayesian block features are enabled"
+    - "Verify FATS features exclude percentile ratios"
+    - "Ensure class weights are applied"
+    - "Check for data leakage"
+    
+  # If overfitting
+  overfitting:
+    - "Reduce max_depth to 5-6"
+    - "Increase min_child_samples to 30"
+    - "Reduce num_leaves to 20"
+    - "Increase bagging_fraction"
+    
+  # If poor TDE recall
+  poor_recall:
+    - "Lower TDE threshold to 0.2"
+    - "Increase TDE class weight to 30"
+    - "Add more SMOTE samples"
+    - "Use focal loss for hard examples"
+    
+  # If unstable CV
+  unstable_cv:
+    - "Increase n_folds to 10"
+    - "Use stratified shuffle split"
+    - "Set larger random seed range"
+    - "Check for duplicate objects"
