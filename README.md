@@ -96,7 +96,10 @@ MALLORN/
    ```
 
 2. **Prepare Data**
-   Place your astronomical logs and split directories in the root repository folder (or manually redirect `BASE_DIR` inside `mallorn/config.py`):
+   The raw astronomical lightcurves and metadata used for this pipeline are hosted externally due to size constraints. Download the dataset directly from Kaggle:
+   - [MALLORN Astronomical Classification Challenge](https://www.kaggle.com/competitions/mallorn-astronomical-classification-challenge/data)
+   
+   Extract the downloaded archive directly into the root repository folder. Your structure should look like this (or you can manually redirect `BASE_DIR` inside `mallorn/config.py`):
    - `train_log.csv`
    - `test_log.csv`
    - `split_01/`, `split_02/`, `split_03/`, etc.
